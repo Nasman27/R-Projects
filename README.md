@@ -1,2 +1,2 @@
 # R-Projects
-Showcasing R strengths
+This is a repository of projects I have completed in R studio. 
