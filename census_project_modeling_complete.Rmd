@@ -1,0 +1,943 @@
+---
+title: "Untitled"
+author: "Group 7"
+date: "January 2, 2019"
+output: html_document
+---
+### Business Understanding
+
+**Introduction**
+It is difficult to be able to determine how much an indivdual will earn based off of various factors that are unique to them, such as age, marital status, race, sex, etc. It would be interesting to understand the different ways we can group various individuals to be able to identify patterns and trends. There would be great use for this type of data within the world of business, marketing in particular. As one would be able to look at a geographical region, understand a few of their charateristics, such as age, sex, race, etc. and be able to group them into a common category of indviduals. Thus allowing them to understand the market and which group of people they should be marketing to for various products. 
+
+**Objective**
+There are many businesses who would need to understand the buying behaviours and market segmentation of individuals based off of their various attributes. Our obejective is to use cluster analysis to understand how various groups of individuals are clustered together and to use this data in a regression model. For our regression model we will use our target variable of annual income, which displays whether an individual has earned more or less than $50,000.
+
+**Background**
+Throughout our analysis we considered the five main components to the ethical ML framework. These consist of fairness, accountability, transparency, reliability and safety, and data privacy and security (Kumar, A., 2018). Our data set was obtained from the UCI Machine Learning Repository and consists of 199523 instances with 42 attributes. These attributes include age, marital status, race, sex, education, citizenship and income. The complete list of attributes is described in our data understanding section below. As we progress through our data exploration, we will test for outliers, missing values and identify key attributes. In order to develop the most appropriate model we will use two different cluster analysis techniques, k-means and hierarchical. Our model will be a logistic regression and will have the assumptions listed below. 
+
+- Target variable is binary (or ordinal for ordinal log-regression)   
+- Log-linear relationship between response and input variables    
+- No (or little) multicollinearity    
+- Error terms and observations must be independent
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, echo=FALSE, include=FALSE}
+#load data
+library(readr)
+library(ggplot2) 
+library(dplyr)
+library(psych)
+library(corrplot)
+library(corrgram)
+census <- read_csv("census-income.data", col_names = FALSE)
+
+colnames(census) <- c("Age", "Workclass", "Industry_code", "Occupation_code", "Education", "Wage_per_hour","Enroll_in_edu_inst_last_wk", "Marital_status", "Major_industry_code", "Major_occupation_code", "Race", "Hispanic_Origin", "Sex", "Member_of_a_labor_union","Reason_for_unemployment","Employment_status","Capital_gain","Capital_losses","Dividends_from_stocks","Tax_filer_status","Region_of_previous_residence","State_of_previous_residence","Detailed_household_and_family_stat","Detailed_Household_summary_in_Household","Number","Migration_code_change_in_msa","Migration_code_change_in_reg","Migration_code_move_within_reg","Live_in_this_house_1_year_ago","Migration_prev_res_in_sunbelt","Num_persons_worked_for_employer","Family_members_under_18","Country_of_birth_father","Country_of_birth_mother","Country_of_birth_self","Citizenship","Own_business_or_self_employed","Fill_inc_questionnaire_for_veterans_admin","Veterans_benefits", "Weeks_worked_in_year","Year","Income")
+```
+
+**Data Description**
+
+The data set is acquired from the UCI Machine Learning Repository (Census-Income (KDD) Data Set). It contains weighted census data extracted from the 1994 and 1995 population surveys conducted by the U.S. Census Bureau.
+
+**Data Understanding**
+
+The dataset has 199,523 instances and 42 features (30 categorical, 12 numeric):
+
+age:	numeric 
+workclass:	categorical 
+industry code:	numeric 
+occupation code:	numeric 
+education:	categorical  
+wage per hour:	numeric 
+enrolled in edu inst last wk:	categorical  
+marital status:	categorical  
+major industry code:	categorical 
+major occupation code:	categorical
+race:	categorical 
+hispanic Origin:	categorical
+sex:	categorical 
+member of a labor union:	categorical 
+reason for unemployment:	categorical 
+full or part time employment stat:	categorical 
+capital gains:	numeric 
+capital losses:	numeric 
+divdends from stocks:	numeric
+tax filer status:	categorical 
+region of previous residence:	categorical
+state of previous residence:	categorical 
+detailed household and family stat:	categorical 
+detailed household summary in household:	categorical
+instance weight number:	numeric 
+migration code-change in msa:	categorical 
+migration code-change in reg:	categorical 
+migration code-move within reg:	categorical 
+live in this house 1 year ago:	categorical 
+migration prev res in sunbelt:	categorical 
+num persons worked for employer: numeric 
+family members under 18:	categorical 
+country of birth father:	categorical 
+country of birth mother:	categorical 
+country of birth self:	categorical 
+citizenship:	categorical 
+own business or self employed:	numeric 
+fill inc questionnaire for veteran's admin:	categorical
+veterans benefits:	numeric 
+weeks worked in year: numeric
+income: categorical
+
+**Data Exploration and Cleaning**
+
+The first step we wanted to perform with the data was to identify and remove any duplicated values. Once we completed this step we moved into our attribute selection and visualization.  
+
+```{r, echo=TRUE, include=FALSE}
+#Check and remove duplicated values
+library(dplyr)
+unique(census)
+census <-census %>% distinct()
+```
+
+```{r, echo=FALSE, include=FALSE}
+#Filter relevant columns, keep the key features
+census1 <- census[, c("Age", "Workclass", "Education", "Marital_status", "Race", "Sex", "Tax_filer_status", "Detailed_Household_summary_in_Household", "Country_of_birth_self", "Citizenship", "Weeks_worked_in_year","Income")]
+```
+
+***Important Attributes Visualization***
+
+We have looked at our data set and gone through each of the attributes. Based on our domain knowledge, we believe that the most important factors will be: (1) age, which we expect to be normally distributed as young and old individuals have lower incomes than those who are in the middle of their careers; (2) education, where we expect to see more highly educated respondents with higher incomes; (3) workclass, as certain workclass may have higher salaries than others; (4) Marital_status, would like to see if there is relationship between marriage and income; (5) Race, as the ethinicity of an individual may affect income; (6) Weeks_worked_in_year, would expect respondents who work more weeks to earn more; and (7) sex, since there is a difference in income levels between males and females; (8) Country_of_birth, as where you are born may give you more opportunities growing up which may affect income; (9) Citizenship, as one would assume it would be more difficult to earn money if you are not a citizen of the country you are residing in; (10) Tax_filer_status, we would like to understand if there is a relationship between tax filing and income; (11) Income, we would like to visualize this attribute as it is our target variable. 
+
+*1) Age* 
+Given that the maximum in the Age variable is 90 , which is much higher than the 3rd quartile, and the minimum age is 0, these indicate potential outliers in the data. The mean of 34.49 indicates that the ages are well distributed between the "typical" working ages of 18-65. This is further supported by the standard deviation of 22.31, indicating that from the mean of approximately 34, the data is spread out to the working ages of mid 20s and up to mid 50s.
+
+```{r, echo=FALSE, include=TRUE}
+summary(census1$Age)
+describe(census1$Age)
+```
+
+To visualize the age attribute, we chose a bar chart and a box plot to examine the distribution of ages across the dataset. As expected, the number of observations from the age of 20-50 is relatively consistent, with the number of observations dropping significantly from 50-80. Surprisingly, the boxplot shows that outliers do not exist, which we had anticipated they would.
+
+```{r, echo=FALSE, include=TRUE}
+ageCount = table(census1$Age)
+barplot(ageCount, xlab = "Age", ylab = "Count", main = "Age Count")
+boxplot(census1$Age, ylab = "Age", col = "red", title = "Age")
+```
+
+*2) Education* 
+To visualize the Education attribute, we chose a bar chart and Pie chart to examine the distribution of education across the dataset. From this visualization we can see that more than half of individuals in our data set have at least a high school education and that there is a need to clean the data given some of the records can be be simplified for our analysis.
+
+```{r, echo=FALSE, include=TRUE}
+educationCount = table(census1$Education)
+barplot(educationCount, xlab = "Education", ylab = "Count", main = "Education Count")
+
+ggplot(data=census,aes(x=Education))+geom_bar()+labs(title="Education level count")+ theme(axis.text.x = element_text(angle = 90, vjust = 0.5))
+
+summary(census1$Education)
+education = census1$Education
+education.frequency = table(education)
+pie(education.frequency,cex=0.7, radius = 1, main = "Education")
+```
+
+```{r, echo=TRUE, include=FALSE}
+#Data Cleaning - Education
+#https://www.justlanded.com/english/United-States/USA-Guide/Education/Elementary-and-Secondary-Education
+
+census1$Education <- as.factor(census1$Education)
+levels(census1$Education)
+census1$Education <- as.character(census1$Education)
+
+census1$Education[census1$Education=="10th grade"] = "High_School_Undergraduate"
+census1$Education[census1$Education=="11th grade"] = "High_School_Undergraduate"
+census1$Education[census1$Education=="12th grade no diploma"] = "High_School_Undergraduate"
+census1$Education[census1$Education=="1st 2nd 3rd or 4th grade"] = "Elementary"
+census1$Education[census1$Education=="5th or 6th grade"] = "Elementary"
+census1$Education[census1$Education=="7th and 8th grade"] = "Elementary"
+census1$Education[census1$Education=="9th grade"] = "High_School_Undergraduate"
+census1$Education[census1$Education=="Associates degree-academic program"] = "Associates_degree"
+census1$Education[census1$Education=="Associates degree-occup /vocational"] = "Associates_degree"
+census1$Education[census1$Education=="Bachelors degree(BA AB BS)"] = "Bachelors_degree"
+census1$Education[census1$Education=="Children"] = "Elementary"
+census1$Education[census1$Education=="Doctorate degree(PhD EdD)"] = "Doctorate"
+census1$Education[census1$Education=="High school graduate"] = "High_School_Graduate"
+census1$Education[census1$Education=="Less than 1st grade"] = "Elementary"
+census1$Education[census1$Education=="Masters degree(MA MS MEng MEd MSW MBA)"] = "Masters"
+census1$Education[census1$Education=="Prof school degree (MD DDS DVM LLB JD)"] = "Professional"
+census1$Education[census1$Education=="Some college but no degree"] = "College_undergraduate"
+
+census1$Education <- as.factor(census1$Education)
+levels(census1$Education)
+```
+
+*3) Workclass*
+We chose a pie chart to visualize the Workclass attribute as it gives a quick overview of the weighting of the different Workclass responses in the dataset. From this visualization we can see many records "not in universe" or "Never worked", which should be outliers in the data. We would like to simplify the Workclass attribute values to 4 factors: Government, Private, Self_employed and Without-Pay.
+
+```{r, echo=FALSE, include=TRUE}
+summary(census1$Workclass)
+jobs = census1$Workclass
+jobs.frequency = table(jobs)
+pie(jobs.frequency,cex=0.7, radius = 1, main = "Workclass")
+```
+
+```{r, echo=TRUE, include=FALSE}
+#Data Cleaning - WorkClass
+
+census1$Workclass <- as.factor(census1$Workclass)
+levels(census1$Workclass)
+census1$Workclass <- as.character(census1$Workclass)
+
+census1$Workclass[census1$Workclass=="Federal government"] = "Government"
+census1$Workclass[census1$Workclass=="Local government"] = "Government"
+census1$Workclass[census1$Workclass=="State government"] = "Government"
+census1$Workclass[census1$Workclass=="Self-employed-incorporated"] = "Self_employed"
+census1$Workclass[census1$Workclass=="Self-employed-not incorporated"] = "Self_employed"
+census1$Workclass[census1$Workclass=="Not in universe"] = "Other"
+
+census1$Workclass <- as.factor(census1$Workclass)
+levels(census1$Workclass)
+```
+
+*4) Marital_status*
+We chose a pie chart to visualize the Marital_status attribute. Overall, we can see our data set has more married than non-married people, and can be simplified from seven to three factor levels: Married, Previously Married and Single.
+
+```{r, echo=FALSE, include=TRUE}
+summary(census1$Marital_status)
+ms = census1$Marital_status
+ms.frequency = table(ms)
+pie(ms.frequency,cex=0.7, radius = 1, main = "Marital Status")
+```
+
+```{r, echo=TRUE, include=FALSE}
+#Data Cleaning - Marital Status
+
+census1$Marital_status <- as.factor(census1$Marital_status)
+levels(census1$Marital_status)
+census1$Marital_status <- as.character(census1$Marital_status)
+
+census1$Marital_status[census1$Marital_status=="Never married"] = "Single"
+census1$Marital_status[census1$Marital_status=="Married-A F spouse present"] = "Married"
+census1$Marital_status[census1$Marital_status=="Married-civilian spouse present"] = "Married"
+census1$Marital_status[census1$Marital_status=="Married-spouse absent"] = "Married"
+census1$Marital_status[census1$Marital_status=="Divorced"] = "Previously_Married"
+census1$Marital_status[census1$Marital_status=="Separated"] = "Previously_Married"
+census1$Marital_status[census1$Marital_status=="Widowed"] = "Previously_Married"
+
+census1$Marital_status <- as.factor(census1$Marital_status)
+levels(census1$Marital_status)
+```
+
+*5) Race*
+We used a pie chart to visulize the race attribute. We can see that the majority of our data set contains White individuals with only four other factors being observed; Black, Asian or Pacific Islander, Amer Indian Aleut or Eskimo and Other. 
+
+```{r, echo=FALSE, include=TRUE}
+summary(census1$Race)
+r = census1$Race
+r.frequency = table(r)
+pie(r.frequency, cex=0.7, radius = 1, main = "Race")
+```
+
+*6) Weeks_worked_in_year*
+From the pie chart and summary table, which describes the number of weeks a respondent works in a year, both the minimum and 1st quartile have values of zero, with the maximum being 52 weeks.
+
+We chose a box plot to visualize the Weeks_worked_in_year attribute to assist in identifing outliers. The box plot indicates that there are no ouliers falling outside of the (Q1-1.5*IQR) and (Q3+1.5*IQR) limits.
+
+```{r, echo=FALSE, include=TRUE}
+summary(census1$Weeks_worked_in_year)
+ww = census1$Weeks_worked_in_year
+ww.frequency = table(ww)
+pie(ww.frequency)
+boxplot(census1$Weeks_worked_in_year, ylab = "Number of weeks worked per year", col = "darkblue", title = "Weeks per Year")
+```
+
+*7) Sex* 
+The summary and pie chart for the Sex attribute, another categorical feature, shows that slightly more than half of the observations are from females. We chose a pie chart to visualize the Sex attribute as it gives an overview of the male and female respondents.
+
+```{r, echo=FALSE, include=TRUE}
+summary(census1$Sex)
+sx = census1$Sex
+sx.frequency = table(sx)
+pie(sx.frequency, cex=0.7, radius = 1, main = "Sex")
+```
+
+*8) Country_of_birth_self* 
+We used a pie chart to understand the country of birth attribute. We can see that the vast majority of observations are from the United States.
+
+```{r, echo=FALSE, include=TRUE}
+summary(census1$Country_of_birth_self)
+cob = census1$Country_of_birth_self
+cob.frequency = table(cob)
+pie(cob.frequency, cex=0.5, radius = 1, main = "Country of Birth")
+```
+
+*9) Citizenship*
+We used a pie chart to show the citizenship attribute. We can see this is similar to the country of birth attribute where the vast majority of observations are citizens of the United States. 
+
+```{r, echo=FALSE, include=TRUE}
+summary(census1$Citizenship)
+citizenship = census1$Citizenship
+citizenship.frequency = table(citizenship)
+pie(citizenship.frequency, cex=0.7, radius = 1, main = "Citizenship")
+```
+
+*10) Tax filer status*
+We chose a pie chart to visualize the breakdown of the tax filer attribute. We can see that the majority are either Joint both under 65, Single or a Non filer. 
+
+```{r, echo=FALSE, include=TRUE}
+pie(table(census$Tax_filer_status), cex=0.7, radius = 1, main = "Employment Status")
+ggplot(data=census,aes(x=Tax_filer_status,fill=Income))+geom_bar(position = "fill") +labs(title="Income level count per Tax Filer Status")+ theme(axis.text.x = element_text(angle = 90, vjust = 0.5))
+```
+
+*11) Income* 
+Using the summary and pie chart, we can see that the vast majority of observations are less than $50,000. This tells us a large percentage of individuals in our data set earn less than $50,000 per year. As this is our target variable, we note that we have an unbalanced data set that we will need to take into consideration when evaluating our model.
+
+```{r, echo=FALSE, include=TRUE}
+summary(census1$Income)
+Income = census1$Income
+Income.frequency = table(Income)
+pie(Income.frequency, cex=0.7, radius = 1, main = "Income")
+```
+
+***Attribute Check and Cleaning***
+We then checked our data to see if there were any missing or '?' values. We discovered that the Counry_of_birth_self attribute had '?' values, therefore, we removed these observations from our data.
+
+```{r, echo=TRUE, include=FALSE}
+#Data Cleaning - Race/Sex/Country of Birth/Citizenship/Income
+
+census1$Race <- as.factor(census1$Race)
+levels(census1$Race)
+
+census1$Sex <- as.factor(census1$Sex)
+levels(census1$Sex)
+
+census1$Country_of_birth_self <- as.factor(census1$Country_of_birth_self)
+levels(census1$Country_of_birth_self)
+
+census1$Citizenship <- as.factor(census1$Citizenship)
+levels(census1$Citizenship)
+
+census1$Tax_filer_status <- as.factor(census1$Tax_filer_status)
+levels(census1$Tax_filer_status)
+
+census1$Income <- as.factor(census1$Income)
+levels(census1$Income)
+
+#Check for missing values
+colSums(is.na(census))
+colSums(census=="")
+
+#From the data structure we see that the Country_of_birth_self feature has values = "?"
+#We want to omit these observations from the data.
+str(census1)
+census1 <- census1[!(census1$Country_of_birth_self=="?"),]
+```
+
+**Exploring relationships between attributes**
+
+*1) Relationship between Sex and Workclass* 
+To visualize the relationship between Sex and Workclass, we used a stacked bar graph, and from this we can clearly see that Workclass for females and males are mostly Private and Other. In addition, females and males have a fairly balanced spread across the different workclasses.
+
+```{r, echo=FALSE, include=TRUE}
+ggplot(census1, aes(census1$Workclass, fill = Sex)) + geom_bar() + theme(axis.text.x = element_text(angle = 90, vjust = 0.5)) + labs(title = "Sex vs Workclass", x="Workclass")
+```
+
+*2) Relationship between Education and Sex*
+It is apparent from the dataset that most females and males just finished an elementary or high school level education. We also can see that males and females are fairly balanced across education. From the visualization, there does not seem to be an outright relationsip between the Education and Sex features.
+
+```{r, echo=FALSE, include=TRUE}
+ggplot(census1, aes(census1$Education, fill = Sex)) + geom_bar() + theme(axis.text.x = element_text(angle = 90, vjust = 0.5)) + labs(title = "Sex vs Education", x="Education")
+```
+
+*3) Relationship between Marital Status and Weeks_worked_in_year*
+From the boxplot comparing the number of weeks worked per year by single, married and previously married individuals in the dataset, it seems that Single individuals log much less weeks compared to married and previously married counterparts. This would seem to make sense as the single individuals are generally younger than the married or previously married inidividuals and therefore may not be working or only working part time.
+
+```{r, echo=FALSE, include=TRUE}
+ggplot(census1, aes(census1$Marital_status, census1$Weeks_worked_in_year)) + geom_boxplot(fill = "red")+ scale_y_continuous("Number of Weeks worked in year", breaks= seq(0,100,by=10))+labs(title = "Marital Status vs Weeks_worked_in_year", x = "Marital Status")
+```
+
+*4) Correlation between Age, Weeks_worked_in_year*
+Looking at the correlation coefficients and the corrplot of the numeric features of the dataset. There does not seem to be any significant correlation or relationship between the two variables. Thus, the numeric features Age and Weeks_worked_in_year can be treated as independent variables in our analysis.
+
+```{r, echo=FALSE, include=TRUE}
+corrgram(census1, order=NULL, panel=panel.shade, text.panel=panel.txt, main="Correlogram")
+
+allnum <- cbind(census1$Age, census1$Weeks_worked_in_year)
+colnames(allnum) <- c("Age", "Weeks_worked_in_year")
+cor_allnum <- cor(allnum)
+cor_allnum
+corrplot(cor_allnum)
+
+```
+
+**Exploring Relationships between Features and the Target Variable**
+
+*1) Relationship between age and income*
+From the plot, we can see that an individual is most likely to earn more than $50,000 in their late 20's to early 50's, around 15% to 20% of people in this age gap earn $50,000+. The individuals in other age groups have much less chance to earn more than $50,000. This may be explained as individuals who are early in their careers are working their way up to the $50,000 mark and individuals who are older may be more compelled to take on less responsibility and/or retire.
+
+```{r, echo=FALSE, include=TRUE}
+ggplot(data=census1,aes(x=Age,fill=Income))+geom_bar(position="fill")+labs(title="Proportion of Income levels with respect to Age ")
+```
+
+*2) Relationship between marital status and income*
+From the chart below we can see that individuals who are married are more likely to earn more than $50,000. It seems they earn more than $50,000 approximately 10% of the time, while it is only about 5% and 1% for previously married and single individuals, respectively.
+
+```{r, echo=FALSE, include=TRUE}
+ggplot(data=census1,aes(x=Marital_status,fill=Income))+geom_bar(position = "fill")+labs(title="Income level proportion per Marital Status")+ theme(axis.text.x = element_text(angle = 90, vjust = 0.5))
+```
+
+*3) Relationship between Race and Income*
+The graph gives us an understanding of how much individuals earn based off of their race. In general, all of the races earn less than $50,000. With this said it seems about 5% of individuals who are either White or Asian-Pac-Islander earn more than $50,000 while approximately 3% of Black individuals earn more than $50,000.  
+
+```{r, echo=FALSE, include=TRUE}
+ggplot(data=census1,aes(x=Race,fill=Income))+geom_bar(position = "fill")+labs(title="Income level proportion per Race")+ theme(axis.text.x = element_text(angle = 90, vjust = 0.5))
+```
+
+*4) Relationship between Income and Sex*
+It is apparent that the income of males from the dataset is more significant than their female counterparts. We see that approximately 10% of males earn more than $50,000 while only 2% of females earn more than $50,000. 
+
+```{r, echo=FALSE, include=TRUE}
+ggplot(data=census1,aes(x=Sex,fill=Income))+geom_bar(position = "fill")+labs(title="Income level proportion per Sex")
+```
+
+*5) Relationship between Income and Education*
+We can see that more individuals with higher education levels often earn more than $50,000 compared to individuals with lower education levels. Specifically, we see individuals with a Masters, Doctorate or Prof School degreee most likely to be earning more than $50,000.
+
+```{r, echo=FALSE, include=TRUE}
+ggplot(data=census1,aes(x=Education,fill=Income))+geom_bar(position = "fill")+ labs(title="Proportion of Income per Education level")+ theme(axis.text.x = element_text(angle = 90, vjust = 0.5))
+```
+
+*6) Relationship between Income and Weeks_worked_per_year*
+From the chart below we can see that an individual is more likely to earn more than $50,000 the more weeks they work in a year. This is inline with our expectations. With that said, there does seem to be some interesting anomalies where individuals who work very few weeks in a year have still earned more than $50,000.
+
+```{r, echo=FALSE, include=TRUE}
+ggplot(data=census1,aes(x=Weeks_worked_in_year,fill=Income))+geom_bar(position = "fill")+ labs(title="Weeks worked in a year VS Income levels")+ theme(axis.text.x = element_text(angle = 90, vjust = 0.5))
+```
+
+*7) Relationship between Income and Country_of_birth_self*
+The majority of individuals are from the United States which leaves few data points for the other countries. This may result in the data being misleading. Bearing this in mind, we can see that certain countries may have an affect on the likelyhood of earning more than $50,000.
+
+```{r, echo=FALSE, include=TRUE}
+ggplot(data=census1,aes(x=Country_of_birth_self,fill=Income))+geom_bar(position="fill")+labs(title="Income level count per Country_of_birth_self")+ theme(axis.text.x = element_text(angle = 90, vjust = 0.5))
+
+ggplot(data=census1,aes(x=Country_of_birth_self,fill=Income))+geom_bar()+labs(title="Income level count per Country of Birth")+ theme(axis.text.x = element_text(angle = 90, vjust = 0.5))
+```
+
+*8) Relationship between Income and Citizenship*
+Once again, the majority of individuals are native born in the United States which leaves few data points for the other citizenships. This may result in the data being misleading. With this in mind, we do not see much of a differnce between the various citizenships and income.
+
+```{r, echo=FALSE, include=TRUE}
+ggplot(data=census1,aes(x=Citizenship,fill=Income))+geom_bar(position="fill")+labs(title="Income level count per Citizenship")+ theme(axis.text.x = element_text(angle = 90, vjust = 0.5))
+
+ggplot(data=census1,aes(x=Citizenship,fill=Income))+geom_bar()+labs(title="Income level count per Citizenship")+ theme(axis.text.x = element_text(angle = 90, vjust = 0.5))
+```
+
+*9) Relationship between Income and Tax_filer_status*
+We can see that a Nonfiler is very unlikely to be earning more than $50,000 while in comparison, a joint filer under the age of 65 is much more likely to earn greater than $50,000; approximately 1% vs 15%, respectively.
+
+```{r, echo=FALSE, include=TRUE}
+ggplot(data=census,aes(x=Tax_filer_status,fill=Income))+geom_bar(position = "fill") +labs(title="Income level count per Tax Filer Status")+ theme(axis.text.x = element_text(angle = 90, vjust = 0.5))
+```
+
+***Addressing Outliers***
+Through our data visualization and cleaning we did not discover any outliers within our data.
+
+*Data Preparation* - Dummy Matrix
+To prepare our data for clustering and modeling, we use the One-Hot Encoding method. We chose this method to avoid confusing the model into thinking that a column has a data with an order hierarchy and to avoid results like predictions halfway between categories. One-hot encoding takes a column which has categorical data, and then splits the column into multiple columns. The numbers are replaced by 1s and 0s, depending on which column has what value. (https://blog.contactsunny.com/data-science/label-encoder-vs-one-hot-encoder-in-machine-learning  and   https://machinelearningmastery.com/why-one-hot-encode-data-in-machine-learning/)
+
+```{r}
+#create dummy matrix for categorical variables
+library(caret)
+library(lattice)
+library(ggplot2)
+dummy1 <- predict(dummyVars(~Workclass+Education+Marital_status+Race+Sex+Tax_filer_status+Citizenship+Income+Country_of_birth_self, data = census1), newdata = census1)
+
+#remove and replace categorical features with numeric dummy matrices
+census2 <- census1[, c("Age", "Weeks_worked_in_year")]
+
+#Attach Dummy matrix
+census2 <- cbind(census2, dummy1)
+
+#remove column for Country_of_birth_self.?
+census2$`Country_of_birth_self.?` <- NULL
+
+```
+
+***Clustering***
+
+Clustering is an unsupervised learning technique. It is the task of grouping together a set of objects in a way that objects in the same cluster are more similar to each other than to objects in other clusters. Similarity is an amount that reflects the strength of relationship between two data objects. Clustering is used in this project for exploratory data mining. (https://www.datacamp.com/community/tutorials/k-means-clustering-r)
+
+*K-means Clustering*
+We use Centroid-based clustering through the kmeans() function. The basic idea behind k-means clustering consists of defining clusters so that the total intra-cluster variation (known as total within-cluster variation) is minimized. The standard algorithm defines the total within-cluster variation as the sum of squared distances Euclidean distances between items and the corresponding centroid. (https://www.r-bloggers.com/k-means-clustering-in-r/)
+
+To apply kmeans, we first find the optimal number of clusters to be used. We note that the total within-cluster sum of square (wss) measures the compactness of the clustering and we want it to be as small as possible. We determine the smallest possible wss through the Elbow Method.(http://www.sthda.com/english/wiki/print.php?id=239)
+
+```{r}
+#Find the optimal number of clusters
+library(cluster)
+
+#Elbow method
+#Compute and plot wss for k = 2 to k = 15
+k_max <- 15 # Maximal number of clusters
+wss <- sapply(1:k_max, 
+        function(k){kmeans(census2, k, nstart=10 )$tot.withinss})
+
+plot(1:k_max, wss,
+       type="b", pch = 19, frame = FALSE, 
+       xlab="Number of clusters K",
+       ylab="Total within-clusters sum of squares")
+abline(v = 3, lty =2)
+
+```
+From the Elbow method, we determine the optimal number of clusters to be 3.
+
+```{r}
+library(fpc)
+census2_kclust <- kmeans(census2, 3, nstart = 10)
+str(census2_kclust)
+plotcluster(census2, census2_kclust$cluster, pointsbyclvecd = FALSE)
+
+plot(census2[c(1,2)], census2_kclust$cluster, col = census2_kclust$cluster, xlab="Age", main="Clusters with respect to Numeric variables Age and Weeks_worked_in_year")
+
+```
+
+```{r}
+Workclasses <- census2[3:8]
+Education_Level <- census2[9:17]
+Marital_Stat <- census2[18:20]
+Races <- census2[21:25]
+Gender <- census2[26:27]
+TaxFiler_Stat <- census2[28:33]
+Citizenships <- census2[34:38]
+Income_Class <- census2[39:40]
+Birth_country <- census2[41:82]
+
+Characteristics <- census2[3:38]
+
+```
+
+The kmeans methodology clustered the dataset according to the following:
+
+Cluster 1
+Those classified under Cluster 1 has the following characteristics:
+Income: Highest proportion of those who earn >50K 
+Education: Most finished College and pursued post graduate studies
+Marital Staus: Mostly Married
+Race: Almost the same proportion across different races as Cluster2 and 3
+Sex: More male than female
+Tax Filer Status: Tax Filer statusfrom joint both under 65 and Single
+
+```{r}
+#Pie Charts for Cluster1
+pie(colSums(Income_Class[census2_kclust$cluster == 1, ]), cex = 0.7, main = "Income - Cluster1", radius = 1)
+
+pie(colSums(Education_Level[census2_kclust$cluster == 1, ]), cex = 0.7, main = "Education - Cluster1", radius = 1)
+
+pie(colSums(Marital_Stat[census2_kclust$cluster == 1, ]), cex = 0.7, main = "Marital Status - Cluster1", radius = 1)
+
+pie(colSums(Races[census2_kclust$cluster == 1, ]), cex = 0.7, main = "Race - Cluster1")
+
+pie(colSums(Gender[census2_kclust$cluster == 1, ]), cex = 0.7, main = "Sex - Cluster1")
+
+pie(colSums(TaxFiler_Stat[census2_kclust$cluster == 1, ]), cex = 0.7, main = "Tax Filer Status - Cluster1")
+
+```
+
+Cluster 2
+Those classified under Cluster 2 has the following characteristics:
+Income: Most earn <50K 
+Education: Most are High School Graduates and undergraduates, and Elementary
+Marital Staus: Mostly Married and Previously Married
+Race: Almost the same proportion across different races as Cluster1 amd 3
+Sex: More female than male
+Tax Filer Status: Mix of different tax filer statuses
+
+```{r}
+#Pie Charts for Cluster2
+pie(colSums(Income_Class[census2_kclust$cluster == 2, ]), cex = 0.7, main = "Income - Cluster2", radius = 1)
+
+pie(colSums(Education_Level[census2_kclust$cluster == 2, ]), cex = 0.7, main = "Education - Cluster2", radius = 1)
+
+pie(colSums(Marital_Stat[census2_kclust$cluster == 2, ]), cex = 0.7, main = "Marital Status - Cluster2", radius = 1)
+
+pie(colSums(Races[census2_kclust$cluster == 2, ]), cex = 0.7, main = "Race - Cluster2")
+
+pie(colSums(Gender[census2_kclust$cluster == 2, ]), cex = 0.7, main = "Sex - Cluster2")
+
+pie(colSums(TaxFiler_Stat[census2_kclust$cluster == 2, ]), cex = 0.7, main = "Tax Filer Status - Cluster2")
+
+```
+Cluster 3
+Those classified under Cluster 3 has the following characteristics:
+Income: Earns <50K 
+Education: Most just finished or took a few grades in Elementary
+Marital Staus: Most are Single
+Race: Almost the same proportion across different races as Cluster2 and 3
+Sex: More female than male
+Tax Filer Status: Most are nonfilers
+
+
+```{r}
+#Pie Charts for Cluster3
+pie(colSums(Income_Class[census2_kclust$cluster == 3, ]), cex = 0.7, main = "Income - Cluster3", radius = 1)
+
+pie(colSums(Education_Level[census2_kclust$cluster == 3, ]), cex = 0.7, main = "Education - Cluster3", radius = 1)
+
+pie(colSums(Marital_Stat[census2_kclust$cluster == 3, ]), cex = 0.7, main = "Marital Status - Cluster3", radius = 1)
+
+pie(colSums(Races[census2_kclust$cluster == 3, ]), cex = 0.7, main = "Race - Cluster3")
+
+pie(colSums(Gender[census2_kclust$cluster == 3, ]), cex = 0.7, main = "Sex - Cluster3")
+
+pie(colSums(TaxFiler_Stat[census2_kclust$cluster == 3, ]), cex = 0.7, main = "Tax Filer Status - Cluster3")
+
+```
+
+Given the characteristics of the clusters and that the Income variable only has 2 factors, we try to see how k-means clustering will partition the data with k = 2. 
+
+```{r}
+census2_kclust2 <- kmeans(census2, 2, nstart = 10)
+```
+
+Cluster 1 of 2-Means clustering seems to be very similar to Cluster 2 of 3-Means clustering with the following characteristics:
+
+Income: Highest proportion of those who earn >50K 
+Education: Most finished College and pursued post graduate studies
+Marital Staus: Mostly Married
+Race: Almost the same proportion across different races as Cluster2 and 3
+Sex: More male than female
+Tax Filer Status: Tax Filer status from joint both under 65 and Single
+
+```{r}
+#Pie Charts for Cluster1
+pie(colSums(Income_Class[census2_kclust2$cluster == 1, ]), cex = 0.7, main = "Income - Cluster1", radius = 1)
+
+pie(colSums(Education_Level[census2_kclust2$cluster == 1, ]), cex = 0.7, main = "Education - Cluster1", radius = 1)
+
+pie(colSums(Marital_Stat[census2_kclust2$cluster == 1, ]), cex = 0.7, main = "Marital Status - Cluster1", radius = 1)
+
+pie(colSums(Races[census2_kclust2$cluster == 1, ]), cex = 0.7, main = "Race - Cluster1")
+
+pie(colSums(Gender[census2_kclust2$cluster == 1, ]), cex = 0.7, main = "Sex - Cluster1")
+
+pie(colSums(TaxFiler_Stat[census2_kclust2$cluster == 1, ]), cex = 0.7, main = "Tax Filer Status - Cluster1")
+```
+
+Cluster 2 of 2-Means clustering is partly similar to Cluster 3 of 3-Means clustering with the following characteristics:
+Income: Earns <50K 
+Education: Most just finished or took a few grades in Elementary
+Marital Staus: Most are Single
+Race: Almost the same proportion across different races as Cluster2 and 3
+Sex: More female than male
+Tax Filer Status: Most are nonfilers
+
+```{r}
+#Pie Charts for Cluster2
+pie(colSums(Income_Class[census2_kclust2$cluster == 2, ]), cex = 0.7, main = "Income - Cluster2", radius = 1)
+
+pie(colSums(Education_Level[census2_kclust2$cluster == 2, ]), cex = 0.7, main = "Education - Cluster2", radius = 1)
+
+pie(colSums(Marital_Stat[census2_kclust2$cluster == 2, ]), cex = 0.7, main = "Marital Status - Cluster2", radius = 1)
+
+pie(colSums(Races[census2_kclust2$cluster == 2, ]), cex = 0.7, main = "Race - Cluster2")
+
+pie(colSums(Gender[census2_kclust2$cluster == 2, ]), cex = 0.7, main = "Sex - Cluster2")
+
+pie(colSums(TaxFiler_Stat[census2_kclust2$cluster == 2, ]), cex = 0.7, main = "Tax Filer Status - Cluster2")
+
+```
+
+**Heirarchical Clustering**
+
+Heirarchical Clustering is an agglomerative approach that starts with each observation as its own distinct cluster.  At each step of the algorithm, a pair of clusters will combine into a single cluster based on shortest distance.  This process is repeated until a stopping criterion is satified.
+
+For this project, heirarchical clustering was used for exploratory data analysis only. We use this methodology to determine how many observations with >50K income will be allocated for each cluster.
+
+Since our dataset has almost 200,000 observations, and the output for heirarchical clustering is visually intuitive, we take a random sample of 20000 observations from the data set.
+
+```{r}
+#Listing the columns of the different variables
+Workclasses <- census2[3:8]
+Education_Level <- census2[9:17]
+Marital_Stat <- census2[18:20]
+Races <- census2[21:25]
+Gender <- census2[26:27]
+TaxFiler_Stat <- census2[28:33]
+Citizenships <- census2[34:38]
+Income_Class <- census2[40] #39:40
+Birth_country <- census2[41:82]
+
+Characteristics <- census2[3:38]
+```
+
+Given that our data is mostly binary, after application of One-hot encoding method, we compute the distance using binary method and obtain the clusters using ward.D method.
+
+```{r}
+train_im = census2[3:38]
+set.seed(101)
+ind<-sample(1:nrow(census2),20000) #Sample
+census3 <- train_im[ind,] 
+census3_inc <- Income_Class[ind,]
+
+# Hierarchical clustering using Ward's method
+census3_hcluster <- hclust(dist(census3, method = "binary"), method = "ward.D")
+
+# Cut tree into 2 groups
+grp <- cutree(census3_hcluster, k = 2)
+
+```
+
+For this project, since the objective is to classify if the Income is >50K or <50K, we divide the sample data into 2 clusters. We visualize the clusters using the Cluster Dendogram.
+
+```{r}
+# Visualize
+plot(census3_hcluster, cex = 0.5) # plot tree
+rect.hclust(census3_hcluster , k = 2, border = 2:6)
+abline(h = 100, col = 'purple')
+
+#suppressPackageStartupMessages(library(dendextend))
+#avg_dend_obj <- as.dendrogram(census3_hcluster)
+#avg_col_dend <- color_branches(avg_dend_obj, h = 2)
+#plot(avg_col_dend)
+```
+
+We note that due to the size of the dataset and the partitions as shown in the cluster dendogram, it is difficult to determine a suitable cut point.
+
+However, we can use the heirarchical clustering results by appending the cluster column to the census3 dataframe to find out the characteristics of those in cluster 1 and 2.
+
+We visualize the partition those earning >50K income, and for more pronounced variables: Education and Marital Status.
+
+```{r}
+
+suppressPackageStartupMessages(library(dplyr))
+census3_cl <- mutate(census3, cluster = grp)
+
+Income_Cls <- census3_inc
+table(census3_cl$cluster, Income_Cls)
+plot(table(census3_cl$cluster, Income_Cls), xlab = "Clusters", ylab = "Income >50K, 0=No 1=Yes", main="")
+
+census3_cl_1 <- census3_cl[(census3_cl$cluster==1),]
+census3_cl_2 <- census3_cl[(census3_cl$cluster==2),]
+
+pie(colSums(census3_cl_1[7:18]), cex = 0.7, main = "Heirarchical Cluster1")
+pie(colSums(census3_cl_2[7:18]), cex = 0.7, main = "Heirarchical Cluster2")
+
+```
+
+
+
+```{r}
+#scaling
+census2$Age <- scale(census2["Age"], center = TRUE, scale = TRUE)
+census2$Weeks_worked_in_year = scale(census2["Weeks_worked_in_year"], center = TRUE, scale = TRUE)
+```
+
+Removing one of the duplicated target variables
+```{r}
+#removing one of the income attributes as they're mirrors of each other
+census2$`Income.- 50000.` = NULL
+#renaming target variable for glm function
+colnames(census2)[colnames(census2)=="Income.50000+."] <- "Income"
+```
+
+###Discussion of our imbalanced dataset
+
+```{r}
+
+```
+
+###Creation of PCA
+The purpose of principal component analysis is to simplify the dataset by turning the original variables into a smaller number of principal components (PCs). With more than 70 variables in the census2 dataset, this will be a valuable way to simplify the data and provide a comparison to see if using PCA improves our models over using the larger number of original variables.
+
+The graph below shows that the first 10 PCs explain 85% of the variation in the dataset. The Plot of Variances associated with the PCs helps determine how many PCs to retain. Using this plot and the fact that the first 10 PCs explain 85% of the variation in the dataset, we decided to retain 10 PCs.
+
+We therefore attached the principal components to our dataset for use in modeling below.
+
+```{r}
+census2.pca <- prcomp(census2[,c(1:74)], center = TRUE,scale. = TRUE)
+summary(census2.pca)
+str(census2.pca)
+
+library(ggfortify)
+pred_census2.pca <- predict(census2.pca, newdata=census2) #[,1:2]
+pred_census2.pca
+plot(census2.pca, type="l")
+
+x = census2
+y = prcomp(census2[,c(1:74)], center = TRUE, scale. = TRUE)
+cen2pca <- cbind(x, y$x)
+cen2pca <- cen2pca[, -c(92:155)]
+```
+
+###Train/test split of PCA data
+```{r}
+train_im2 = cen2pca[1:nrow(cen2pca),c(1:91)]
+set.seed(101)
+ind2<-sample(1:nrow(cen2pca),nrow(cen2pca)*.80) # Sample of 80%
+train.pca<-train_im2[ind,] # The train set of the model
+test.pca<-train_im2[-ind,] # The test set of the model
+```
+
+###Train/test split of original dataset
+```{r}
+train_im = census2[1:nrow(census2),c(1:74)]
+set.seed(101)
+ind<-sample(1:nrow(census2),nrow(census2)*.80) # Sample of 80%
+train<-train_im[ind,] # The train set of the model
+test<-train_im[-ind,] # The test set of the model
+```
+
+###Logistic regression:
+
+We built a logistic regression model in order to determine whether an individual has earned more or less than $50,000. First we filtered our data set to only include the key attributes that we discussed earlier. We then split this data into training and test. We used an 80/20 split for train and test data as this is a simple basic way to split our data (Shah, T., 2017). We therefore did not use other data splitting methods such as k fold cross validation.
+
+To evaluate this data, we should use the ANOVA Chi-Square test to see which attributes are significant. However, when running the code "anova(model_lr, test = 'Chisq')" gives an error "glm.fit: algorithm did not converge".
+
+The mean of our predictions for this model also tells us that the accuracy of the model is approximately 94.2%. However, R gives us a warning when running this prediction that "prediction from a rank-deficient fit may be misleading" so it may not be a trustworthy result.
+```{r}
+model_lr<- glm(Income~., binomial(link='logit'), data=train)
+summary(model_lr)
+#anova(model_lr, test = 'Chisq')
+
+pred.train.lr <- predict(model_lr,test)
+pred.train.lr <- ifelse(pred.train.lr > 0.5,"1", "0")
+mean(pred.train.lr==test$Income)
+```
+
+Using a confusion matrix, we also determined the precision, recall and F scores for our model. Precision indicates how many values, out of all the predicted positive values, are actually positive. This is calculated as TP/(TP + FP). Our model had a precision of 94.4%. Recall indicates how many positive values, out of all the positive values, have been correctly predicted. This is calculated as TP/(TP + FN). Our model had a recall of 99.7%. F Score is the harmonic mean of precision and recall and lies between 0 and 1. It is calculated as 2((precision*recall)/(precision+recall)) (Saraswat, M., n.d.). Our model had an F Score of 97.0% which is a pretty good score as the higher the better.
+```{r, echo = FALSE, include = TRUE}
+##To test using the confusion matrix
+t2<-table(pred.train.lr,test$Income)
+
+accuracy_lr <- sum(t2[2,2]+t2[1,1])/sum(t2[,])
+precision_lr<- t2[1,1]/(sum(t2[1,]))
+recall_lr<- t2[1,1]/(sum(t2[,1]))
+precision_lr
+recall_lr
+accuracy_lr
+F1_lr<- 2*precision_lr*recall_lr/(precision_lr+recall_lr)
+F1_lr
+```
+
+We also tested the Receiver Operator Characteristic (ROC) score which determines the accuracy of the model at a defined threshold, in this case we have set a 0.5 threshold. It uses the Area Under the Curve (AUC) to represent the performance of the ROC Curve, the greater the area the better the model. Ideally we would like to see the curve pushed up into the top left hand corner, maximizing the area under the curve (Saraswat, M., n.d.). Our model does not perform very well on this test as it is sitting fairly low in the left corner of the chart.
+
+```{r, echo = FALSE, include = FALSE}
+#Receiver Operator Characterisic (ROC), Area Under Curve (AUC) test
+library(Metrics)
+library(ROCR)
+
+#Receiver Operator Characterisic (ROC), Area Under Curve (AUC) test
+pred.train.lr1 <- predict(model_lr,test)
+pred.train.lr1 <- ifelse(pred.train.lr1 > 0.5,1,0)
+
+pr <- prediction(pred.train.lr1,test$Income)
+perf <- performance(pr,measure = "tpr",x.measure = "fpr")
+plot(perf) > auc(test$Income, pred.train.lr1)
+```
+
+###Logistic regression model using principal components
+This improves the accuracy of the model from 94.2% to 97.4%.
+Precision: 0.9781236
+Recall: 0.9947974
+Accuracy: 0.9742879
+F1 score: 0.9863901
+
+```{r}
+model_lr_pca<- glm(Income~PC1+PC2+PC3+PC4+PC5+PC6+PC7+PC8+PC9+PC10, binomial(link='logit'), data=train.pca)
+summary(model_lr_pca)
+#anova(model_lr_pca, test = 'Chisq')
+
+pred.train.lr.pca <- predict(model_lr_pca,test.pca)
+pred.train.lr.pca <- ifelse(pred.train.lr.pca > 0.5,"1", "0")
+mean(pred.train.lr.pca==test.pca$Income)
+
+t2.pca<-table(pred.train.lr.pca,test.pca$Income)
+
+accuracy_lr.pca <- sum(t2.pca[2,2]+t2.pca[1,1])/sum(t2.pca[,])
+precision_lr.pca<- t2.pca[1,1]/(sum(t2.pca[1,]))
+recall_lr.pca<- t2.pca[1,1]/(sum(t2.pca[,1]))
+precision_lr.pca
+recall_lr.pca
+accuracy_lr.pca
+F1_lr.pca<- 2*precision_lr.pca*recall_lr.pca/(precision_lr.pca+recall_lr.pca)
+F1_lr.pca
+```
+
+###Decision Tree
+
+Given the objective of classifying whether an individual will earn more or less than $50,000 annually, we use the decision tree to consider a set of questions that can partition the dataset. The questions are chosen so that the best split is obtained and to find the best questions for the partitions. This will stop once all of the points considered are of the same class. To perform classification, given a certain point, the questions will guide it to the appropriate class (Le, J., 2018).
+
+From the Decision Tree, it appears that the most important attributes are weeks_worked_in_year, sex, age, and a variety of the variables associated with education. Intuitively, these are all variables that you would think would be important for determining income levels. The plot shows the cross-validation error for the levels of the tree.
+
+```{r}
+library(e1071)
+library(tree)
+library(caret)
+library(rpart)
+library(rpart.plot)
+tree.census_train = rpart(Income~., data = train)
+rpart.plot(tree.census_train)
+printcp(tree.census_train)
+plotcp(tree.census_train)
+```
+
+With the help of the confusion matrix, we determine the accuracy, precision and recall of the model. The accuracy of the classification tree is at 98.5%, which implies that the model is correct almost 99% of the time. However, since we know that our dataset is very imbalanced, we need to look at other ways to evaluate the model. The precision is only 65.7%, showing that the number of true positives is actually quite low. The recall is 94.5% and the F1 score is 78.9%.
+
+Given the issues with precision, we decided to use the 10 principal components we already selected to see if we could improve the model.
+
+```{r, echo=FALSE, include=TRUE}
+#We take this tree and predict it on the test set
+tree.predict_test <- predict(tree.census_train, test)
+
+#evaluating results manually because the confusion matrix is being dumb
+t2.tree<-table(tree.predict_test,test$Income)
+
+accuracy_tree <- sum(t2.tree[2,2]+t2[1,1])/sum(t2.tree[,])
+precision_tree<- t2.tree[1,1]/(sum(t2.tree[1,]))
+recall_tree<- t2.tree[1,1]/(sum(t2.tree[,1]))
+precision_tree
+recall_tree
+accuracy_tree
+F1_tree<- 2*precision_tree*recall_tree/(precision_tree+recall_tree)
+F1_tree
+```
+
+Next, we ran the decision tree model using our 10 principal components and the same target variable, income.
+
+In this case, the visual output of the decision tree is less useful because the principal components are not as intuitive as the names of the original variables. However, we can still evaluate the validity of the model using a confusion matrix.
+
+```{r}
+tree.census_train.pca = rpart(Income~PC1+PC2+PC3+PC4+PC5+PC6+PC7+PC8+PC9+PC10, data = train.pca)
+rpart.plot(tree.census_train.pca)
+printcp(tree.census_train.pca)
+plotcp(tree.census_train.pca)
+```
+
+Evaluating the decision tree created with our principal components shows that it drastically improves the model over using the original variables. Here, our accuracy increases to 99.2%, but more importantly precision increases from 65.7% to 94.7%. This is a dramatic improvement in the true positives rate. Interesting the recall actually decreased to 88.9%, but the F1 score also improved to 96.9%.
+
+Overall, this is the better of the two models, and overall is stronger than any of the logistic regression models as well. 
+
+```{r, echo=FALSE, include=TRUE}
+#We take this tree and predict it on the test set
+tree.predict_test.pca <- predict(tree.census_train.pca, test.pca)
+
+#evaluating results manually because the confusion matrix is being dumb
+t2.tree.pca<-table(tree.predict_test.pca,test.pca$Income)
+
+accuracy_tree.pca <- sum(t2.tree.pca[2,2]+t2.tree.pca[1,1])/sum(t2.tree.pca[,])
+precision_tree.pca<- t2.tree.pca[1,1]/(sum(t2.tree.pca[1,]))
+recall_tree.pca<- t2.tree.pca[1,1]/(sum(t2.tree.pca[,1]))
+precision_tree.pca
+recall_tree.pca
+accuracy_tree.pca
+F1_tree.pca<- 2*precision_tree.pca*recall_tree.pca/(precision_tree.pca+recall_tree.pca)
+F1_tree.pca
+```
+Deployment
+
+Our objective was to build a model that will classify whether or not an individual will earn more or less than $50,000 annually. We are proud to say we have made a model that delivers on that goal. There is a specific audience we had in mind while developing this model. We were aiming at having businesses looking to target their luxury goods. Their marketing teams would be the prime audience who would want to use our model. In general, there are four ways to deploy a model. Either through data science tools such as the cloud, programming language such as Java, R, Python, database and SQL script such as TSQL, PL-SQL or predictive model markup language (Sayed, S., 2018). 
+
+Deployment would be through programming language given the nature of our data. It would be beneficial to update this data whenever a new census comes out, which in the United States is every ten years [https://www.census.gov/programs-surveys/decennial-census/2020-census/about.html]. We could increase the value this model brings by adding a geographical variable. This would mean an evermore smaller scope where companies can focus on their target city as well as their target audience.  This constant evolution will assist in making our model that much more valuable to interested parties.
+
+Conclusion
+
+Our objective was to build a model that will classify whether or not an individual will earn more or less than $50,000 annually. As our thorough project states we created a number of models and rigorously evaluated them to determine which would be the most useful model. We have created a hierarchal clustering model, decision tree , and a logistical regression. All of these were investigated using a variety of visualization techniques, PCA analysis, and appropriate model evaluation techniques. We have determined our decision tree is the most useful model. As stated in our report: Evaluating the decision tree created with our principal components shows that it drastically improves the model over using the original variables. Here, our accuracy increases to 99.2%, but more importantly precision increases from 65.7% to 94.7%. This is a dramatic improvement in the true positives rate. Interesting the recall actually decreased to 88.9%, but the F1 score also improved to 96.9%. 
+The complete improvement following the addition of our principal components propels our model to the a higher standard than we previously experienced. With this understanding we would deploy our decision tree model as it is the most useful and accurate model for companies seeking to understand income levels and which part of the market they should be targeting.
